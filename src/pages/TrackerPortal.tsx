@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Timer, Play, Pause, CheckCircle2, Clock, ListTodo, Plus, Trash2, Calendar, AlertCircle, Moon, Sun } from "lucide-react";
+import { Timer, Play, Pause, CheckCircle2, Clock, ListTodo, Plus, Trash2, Calendar, AlertCircle, Moon, Sun, Circle, TrendingUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { CaptureWidget } from "@/components/CaptureWidget";
 import { TrackerAssignedTasks } from "@/components/TrackerAssignedTasks";
@@ -55,7 +55,7 @@ const TrackerPortal = () => {
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const intervalRef = useRef<number | null>(null);
-  const { stopTracking } = useTracking();
+  const { startTracking, stopTracking, activeMode } = useTracking();
 
   // Manual entry state
   const [manualDate, setManualDate] = useState(new Date().toISOString().slice(0, 10));
@@ -191,6 +191,7 @@ const TrackerPortal = () => {
     }
     setStartedAt(new Date());
     setRunning(true);
+    startTracking("auto-screenshot");
   };
 
   const handleStartReady = (task: Task) => {
@@ -276,6 +277,7 @@ const TrackerPortal = () => {
         } else {
           setStartedAt(new Date());
           setRunning(true);
+          startTracking("auto-screenshot");
           setNewTaskTitle("");
           toast.success("Project started! Client can now see your active status.");
         }
@@ -354,6 +356,7 @@ const TrackerPortal = () => {
               <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Lifetime</div>
               <div className="text-xl font-bold tabular-nums text-muted-foreground/60">{fmtHours(totalTracked)}</div>
             </div>
+            </div>
           </div>
         </div>
       </header>
@@ -369,7 +372,12 @@ const TrackerPortal = () => {
                 <div className="flex items-center justify-between">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-soft text-brand-soft-foreground text-[10px] font-bold uppercase tracking-wider">
                     <span className={`h-1.5 w-1.5 rounded-full ${running ? "bg-brand animate-pulse" : "bg-muted-foreground"}`} />
-                    {running ? "Live Session" : elapsed > 0 ? "Paused" : "Ready to track"}
+                    {running ? (
+                      <span className="flex items-center gap-1.5">
+                        Live Session
+                        {activeMode && <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-brand/10 text-[9px] font-bold"><Circle className="h-2 w-2 fill-destructive animate-pulse" /> Recording Active</span>}
+                      </span>
+                    ) : elapsed > 0 ? "Paused" : "Ready to track"}
                   </div>
                   {!running && !elapsed && (
                     <button 
