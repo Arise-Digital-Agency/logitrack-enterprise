@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.client_id_for_token(uuid);

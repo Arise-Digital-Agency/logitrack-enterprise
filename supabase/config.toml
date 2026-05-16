@@ -1,0 +1,7 @@
+project_id = "oldvixzzzcfvggouisdf"
+
+[functions.client-portal]
+verify_jwt = false
+
+[functions.tracker-portal]
+verify_jwt = false

@@ -1,0 +1,55 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { TrackingProvider } from "@/contexts/TrackingContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import TimeTracker from "./pages/TimeTracker";
+import Invoicing from "./pages/Invoicing";
+import Clients from "./pages/Clients";
+import NewRequest from "./pages/NewRequest";
+import DailyReport from "./pages/DailyReport";
+import Settings from "./pages/Settings";
+import ResetPassword from "./pages/ResetPassword";
+import ClientPortal from "./pages/ClientPortal";
+import TaskAssignment from "./pages/TaskAssignment";
+import TrackerPortal from "./pages/TrackerPortal";
+import NotFound from "./pages/NotFound";
+
+const queryClient = new QueryClient();
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <AuthProvider>
+          <TrackingProvider>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/portal/:token" element={<ClientPortal />} />
+              <Route path="/tracker-portal/:token" element={<TrackerPortal />} />
+              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/time-tracker" element={<ProtectedRoute><TimeTracker /></ProtectedRoute>} />
+              <Route path="/invoicing" element={<ProtectedRoute><Invoicing /></ProtectedRoute>} />
+              <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
+              <Route path="/requests" element={<ProtectedRoute><NewRequest /></ProtectedRoute>} />
+              <Route path="/reports" element={<ProtectedRoute><DailyReport /></ProtectedRoute>} />
+              <Route path="/task-assignment" element={<ProtectedRoute><TaskAssignment /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </TrackingProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;
