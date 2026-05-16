@@ -20,9 +20,29 @@ import TaskAssignment from "./pages/TaskAssignment";
 import TrackerPortal from "./pages/TrackerPortal";
 import NotFound from "./pages/NotFound";
 
+import { useEffect } from "react";
+
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  useEffect(() => {
+    // Check if user prefers dark mode or has set it before
+    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+    }
+
+    // Listen for changes
+    const listener = (e: MediaQueryListEvent) => {
+      if (e.matches) document.documentElement.classList.add("dark");
+      else document.documentElement.classList.remove("dark");
+    };
+    
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", listener);
+    return () => window.matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", listener);
+  }, []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -50,6 +70,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

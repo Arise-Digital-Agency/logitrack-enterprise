@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2, Send, Paperclip, FolderUp, FileIcon, Download, Clock, MessageSquare, Building2, AlertCircle, Plus, CheckSquare, Square, Users, CalendarDays } from "lucide-react";
+import { Loader2, Send, Paperclip, FolderUp, FileIcon, Download, Clock, MessageSquare, Building2, AlertCircle, Plus, CheckSquare, Square, Users, CalendarDays, Moon, Sun } from "lucide-react";
 import { toast } from "sonner";
 
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/client-portal`;
@@ -58,6 +58,14 @@ const ClientPortal = () => {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [isDark, setIsDark] = useState(document.documentElement.classList.contains("dark"));
+
+  const toggleTheme = () => {
+    const next = !isDark;
+    setIsDark(next);
+    if (next) document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -104,7 +112,6 @@ const ClientPortal = () => {
     return () => clearInterval(iv);
   }, [token, reportDate]);
 
-  // Mark read when opening a request with unread messages
   const openRequest = async (id: string) => {
     if (openRequestId === id) { setOpenRequestId(null); setCommentDraft(""); setTaskDraft(""); return; }
     setOpenRequestId(id);
@@ -176,17 +183,25 @@ const ClientPortal = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-md bg-brand-soft text-brand-soft-foreground grid place-items-center"><Building2 className="h-5 w-5" /></div>
-          <div>
-            <h1 className="text-xl font-bold">{client.name}'s portal</h1>
-            <p className="text-xs text-muted-foreground">{client.company ?? "Submit and track your requests"}</p>
+        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-md bg-brand-soft text-brand-soft-foreground grid place-items-center"><Building2 className="h-5 w-5" /></div>
+            <div>
+              <h1 className="text-xl font-bold">{client.name}'s portal</h1>
+              <p className="text-xs text-muted-foreground">{client.company ?? "Submit and track your requests"}</p>
+            </div>
           </div>
+          <button 
+            onClick={toggleTheme}
+            className="h-10 w-10 rounded-xl bg-secondary hover:bg-secondary/80 flex items-center justify-center transition-colors"
+            title="Toggle theme"
+          >
+            {isDark ? <Sun className="h-5 w-5 text-yellow-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
+          </button>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
-        {/* Submit form */}
         <form onSubmit={submit} className="bg-card rounded-lg border border-border p-6 shadow-[var(--shadow-card)] space-y-5 h-fit">
           <div><h2 className="font-bold text-lg">New request</h2><p className="text-xs text-muted-foreground">Tell us what you need.</p></div>
           <div className="space-y-1.5">
@@ -238,7 +253,6 @@ const ClientPortal = () => {
           </button>
         </form>
 
-        {/* Request list */}
         <section className="bg-card rounded-lg border border-border shadow-[var(--shadow-card)] overflow-hidden">
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
             <h2 className="font-bold">Your requests</h2>
@@ -285,7 +299,6 @@ const ClientPortal = () => {
                     <div className="mt-4 space-y-4">
                       {r.description && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{r.description}</p>}
 
-                      {/* Sub-tasks */}
                       <div>
                         <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Tasks</div>
                         <div className="space-y-1.5">
@@ -303,7 +316,6 @@ const ClientPortal = () => {
                         </div>
                       </div>
 
-                      {/* Conversation & files */}
                       <div>
                         <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Conversation & files</div>
                         <div className="space-y-2 max-h-72 overflow-auto">

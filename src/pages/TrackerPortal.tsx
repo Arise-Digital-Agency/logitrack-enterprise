@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Timer, Play, Pause, CheckCircle2, Clock, ListTodo, Plus, Trash2, Calendar, AlertCircle } from "lucide-react";
+import { Timer, Play, Pause, CheckCircle2, Clock, ListTodo, Plus, Trash2, Calendar, AlertCircle, Moon, Sun } from "lucide-react";
 import { toast } from "sonner";
 import { CaptureWidget } from "@/components/CaptureWidget";
 import { TrackerAssignedTasks } from "@/components/TrackerAssignedTasks";
@@ -53,6 +53,7 @@ const TrackerPortal = () => {
   const [showManualForm, setShowManualForm] = useState(false);
   const [showModeModal, setShowModeModal] = useState(false);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
   const intervalRef = useRef<number | null>(null);
   const { stopTracking } = useTracking();
 
@@ -60,6 +61,14 @@ const TrackerPortal = () => {
   const [manualDate, setManualDate] = useState(new Date().toISOString().slice(0, 10));
   const [manualHours, setManualHours] = useState("");
   const [manualMinutes, setManualMinutes] = useState("");
+  const [isDark, setIsDark] = useState(document.documentElement.classList.contains("dark"));
+
+  const toggleTheme = () => {
+    const next = !isDark;
+    setIsDark(next);
+    if (next) document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
+  };
 
   const TIMER_KEY = useMemo(() => `${TIMER_KEY_PREFIX}${token}`, [token]);
 
@@ -247,9 +256,10 @@ const TrackerPortal = () => {
     finally { setSaving(false); }
   };
 
-  const handleAddTask = async () => {
-    const title = prompt("Enter the name of the new project task:");
-    if (!title?.trim()) return;
+  const handleAddTask = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const title = newTaskTitle.trim();
+    if (!title) return;
     setSaving(true);
     try {
       // 1. Create task (accepted)
@@ -266,6 +276,7 @@ const TrackerPortal = () => {
         } else {
           setStartedAt(new Date());
           setRunning(true);
+          setNewTaskTitle("");
           toast.success("Project started! Client can now see your active status.");
         }
       }
@@ -326,7 +337,15 @@ const TrackerPortal = () => {
               </div>
             </div>
           </div>
-          <div className="hidden sm:flex gap-6 text-right">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={toggleTheme}
+              className="h-10 w-10 rounded-xl bg-secondary hover:bg-secondary/80 flex items-center justify-center transition-colors"
+              title="Toggle theme"
+            >
+              {isDark ? <Sun className="h-5 w-5 text-yellow-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
+            </button>
+            <div className="hidden sm:flex gap-6 text-right">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Today</div>
               <div className="text-xl font-bold tabular-nums text-brand">{fmtHours(logs.filter(l => new Date(l.started_at).toDateString() === new Date().toDateString()).reduce((s, l) => s + l.duration_seconds, 0))}</div>
@@ -393,35 +412,54 @@ const TrackerPortal = () => {
                   </form>
                 )}
 
-                <div className="space-y-6">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Name of the project</label>
-                      <button onClick={handleAddTask} disabled={running || saving} type="button" className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand text-brand-foreground hover:bg-brand/90 text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm">
-                        <Plus className="h-3 w-3" /> Create & Start Tracking
-                      </button>
+                  <div className="space-y-6">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Start New Project Task</label>
+                      <form onSubmit={handleAddTask} className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Plus className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <input 
+                            type="text" 
+                            placeholder="Project name or specific task..." 
+                            value={newTaskTitle}
+                            onChange={(e) => setNewTaskTitle(e.target.value)}
+                            disabled={running || saving}
+                            className="w-full h-12 pl-11 pr-4 rounded-xl border border-border bg-background text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand disabled:opacity-50"
+                          />
+                        </div>
+                        <button 
+                          type="submit" 
+                          disabled={!newTaskTitle.trim() || running || saving}
+                          className="h-12 px-6 rounded-xl bg-brand text-brand-foreground font-bold text-sm shadow-lg shadow-brand/20 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                          Create & Start
+                        </button>
+                      </form>
                     </div>
-                    <div className="relative group">
-                      <ListTodo className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-brand transition-colors" />
-                      <select
-                        value={selectedTaskId}
-                        onChange={(e) => setSelectedTaskId(e.target.value)}
-                        disabled={running}
-                        className="w-full h-14 pl-12 pr-10 rounded-2xl border-2 border-border bg-background text-base font-bold focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:opacity-50 appearance-none cursor-pointer transition-all"
-                      >
-                        <option value="">Select an active project task...</option>
-                        {trackableTasks.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.title} {t.requests?.title ? `— ${t.requests.title}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
-                        <ChevronDown className="h-5 w-5" />
+
+                    <div className="space-y-1.5 pt-2 border-t border-border/50">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Or resume existing project</label>
+                      <div className="relative group">
+                        <ListTodo className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-brand transition-colors" />
+                        <select
+                          value={selectedTaskId}
+                          onChange={(e) => setSelectedTaskId(e.target.value)}
+                          disabled={running}
+                          className="w-full h-14 pl-12 pr-10 rounded-2xl border-2 border-border bg-background text-base font-bold focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:opacity-50 appearance-none cursor-pointer transition-all"
+                        >
+                          <option value="">Select an active project task...</option>
+                          {trackableTasks.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.title} {t.requests?.title ? `— ${t.requests.title}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+                          <ChevronDown className="h-5 w-5" />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
                 {!showManualForm && (
                   <div className="flex items-center justify-center gap-3 pt-4">
