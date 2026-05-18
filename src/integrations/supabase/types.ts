@@ -362,6 +362,7 @@ export type Database = {
           email: string | null
           id: string
           name: string
+          role: string
           share_token: string
           user_id: string
         }
@@ -371,6 +372,7 @@ export type Database = {
           email?: string | null
           id?: string
           name: string
+          role?: string
           share_token?: string
           user_id: string
         }
@@ -380,6 +382,7 @@ export type Database = {
           email?: string | null
           id?: string
           name?: string
+          role?: string
           share_token?: string
           user_id?: string
         }
@@ -403,9 +406,11 @@ export type Database = {
           duration_seconds: number
           hourly_rate: number | null
           id: string
+          is_active: boolean
           request_id: string | null
           started_at: string
           team_member_id: string | null
+          tracking_mode: string
           user_id: string
         }
         Insert: {
@@ -417,9 +422,11 @@ export type Database = {
           duration_seconds?: number
           hourly_rate?: number | null
           id?: string
+          is_active?: boolean
           request_id?: string | null
           started_at?: string
           team_member_id?: string | null
+          tracking_mode?: string
           user_id: string
         }
         Update: {
@@ -431,9 +438,11 @@ export type Database = {
           duration_seconds?: number
           hourly_rate?: number | null
           id?: string
+          is_active?: boolean
           request_id?: string | null
           started_at?: string
           team_member_id?: string | null
+          tracking_mode?: string
           user_id?: string
         }
         Relationships: [

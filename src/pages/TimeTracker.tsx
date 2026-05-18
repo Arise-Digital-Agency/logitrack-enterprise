@@ -158,6 +158,11 @@ const TimeTracker = () => {
     if (!description.trim()) setDescription(req.title);
   };
 
+  const handlePause = () => {
+    setRunning(false);
+    stopTracking();
+  };
+
   const handleStart = () => {
     const parsed = logSchema.safeParse({ description, clientId: clientId || null });
     if (!parsed.success) { toast.error(parsed.error.errors[0].message); return; }
@@ -170,18 +175,16 @@ const TimeTracker = () => {
       }
     }
     
-    // If we're already running or resuming, just start
-    if (startedAt) {
-      setRunning(true);
-      return;
-    }
-
-    // Force mode selection for new session
+    // Force mode selection for new session or resumption
     setShowModeModal(true);
   };
 
   const startWithMode = (mode: string) => {
-    setStartedAt(new Date());
+    if (startedAt) {
+      setStartedAt(new Date(Date.now() - elapsed * 1000));
+    } else {
+      setStartedAt(new Date());
+    }
     setRunning(true);
   };
 
@@ -249,7 +252,7 @@ const TimeTracker = () => {
             <div className="flex gap-2 shrink-0">
               {running ? (
                 <>
-                  <button onClick={() => setRunning(false)} className="inline-flex items-center gap-2 h-11 px-4 rounded-lg bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm font-semibold">
+                  <button onClick={handlePause} className="inline-flex items-center gap-2 h-11 px-4 rounded-lg bg-secondary hover:bg-secondary/80 text-secondary-foreground text-sm font-semibold">
                     <Pause className="h-4 w-4" /> Pause
                   </button>
                   <button onClick={handleFinish} className="inline-flex items-center gap-2 h-11 px-4 rounded-lg bg-brand hover:bg-brand/90 text-brand-foreground text-sm font-semibold">
@@ -268,7 +271,7 @@ const TimeTracker = () => {
                     <CheckCircle2 className="h-4 w-4" /> Finish
                   </button>
                   <button
-                    onClick={() => { if (!startedAt) setStartedAt(new Date(Date.now() - elapsed * 1000)); setRunning(true); }}
+                    onClick={() => setShowModeModal(true)}
                     className="inline-flex items-center gap-2 h-11 px-5 rounded-lg bg-brand hover:bg-brand/90 text-brand-foreground text-sm font-semibold ring-2 ring-brand/30"
                   >
                     <Play className="h-4 w-4 fill-current" /> Resume

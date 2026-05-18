@@ -6,6 +6,7 @@ import { CaptureWidget } from "@/components/CaptureWidget";
 import { TrackerAssignedTasks } from "@/components/TrackerAssignedTasks";
 import { TrackingModeModal } from "@/components/TrackingModeModal";
 import { useTracking } from "@/contexts/TrackingContext";
+import { TeamControlCenter } from "@/components/TeamControlCenter";
 
 const FUNC_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tracker-portal`;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -38,9 +39,13 @@ const fmtHours = (s: number) => {
 
 const TrackerPortal = () => {
   const { token } = useParams<{ token: string }>();
-  const [member, setMember] = useState<{ id: string; name: string; responsibility: string | null } | null>(null);
+  const [member, setMember] = useState<{ id: string; name: string; responsibility: string | null; role?: string } | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [liveSessions, setLiveSessions] = useState<any[]>([]);
+  const [historicalLogs, setHistoricalLogs] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<"personal" | "team">("personal");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +53,7 @@ const TrackerPortal = () => {
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [activeLogId, setActiveLogId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
@@ -94,6 +100,9 @@ const TrackerPortal = () => {
       setMember(data.member);
       setTasks(data.tasks ?? []);
       setLogs(data.logs ?? []);
+      setTeamMembers(data.teamMembers ?? []);
+      setLiveSessions(data.liveSessions ?? []);
+      setHistoricalLogs(data.historicalLogs ?? []);
     } catch { setError("Failed to load portal"); }
     finally { setLoading(false); }
   };
@@ -107,6 +116,7 @@ const TrackerPortal = () => {
       if (!raw) return;
       const s = JSON.parse(raw);
       setSelectedTaskId(s.selectedTaskId ?? "");
+      setActiveLogId(s.activeLogId ?? null);
       if (s.running && s.startedAt) {
         const startMs = new Date(s.startedAt).getTime();
         const liveElapsed = Math.floor((Date.now() - startMs) / 1000);
@@ -122,8 +132,8 @@ const TrackerPortal = () => {
 
   // Persist timer
   useEffect(() => {
-    const payload = { running, startedAt: startedAt?.toISOString() ?? null, elapsed, selectedTaskId };
-    if (!running && elapsed === 0 && !selectedTaskId) {
+    const payload = { running, startedAt: startedAt?.toISOString() ?? null, elapsed, selectedTaskId, activeLogId };
+    if (!running && elapsed === 0 && !selectedTaskId && !activeLogId) {
       localStorage.removeItem(TIMER_KEY);
     } else {
       localStorage.setItem(TIMER_KEY, JSON.stringify(payload));
@@ -165,6 +175,11 @@ const TrackerPortal = () => {
     }
   };
 
+  const handlePause = () => {
+    setRunning(false);
+    stopTracking();
+  };
+
   const handleStart = () => {
     if (!selectedTaskId) { toast.error("Select a project/task first"); return; }
     if (selectedTaskId) {
@@ -174,24 +189,31 @@ const TrackerPortal = () => {
         return;
       }
     }
-    if (startedAt) {
-      setRunning(true);
-      return;
-    }
     setShowModeModal(true);
   };
 
-  const startWithMode = async (_mode: string) => {
+  const startWithMode = async (mode: "standard" | "recording" | "auto-screenshot") => {
+    let newLogId = activeLogId;
+    if (startedAt) {
+      setStartedAt(new Date(Date.now() - elapsed * 1000));
+      setRunning(true);
+      return;
+    }
+
     if (selectedTaskId) {
       const t = tasks.find((x) => x.id === selectedTaskId);
-      if (t?.status === "accepted") {
-        await api("start_log", { assigned_task_id: selectedTaskId, description: t.title });
+      if (t) {
+        const res = await api("start_log", { assigned_task_id: selectedTaskId, description: t.title, tracking_mode: mode });
+        if (res.active_log_id) newLogId = res.active_log_id;
         await loadData();
       }
+    } else {
+      const res = await api("start_log", { description: "Untitled Session", tracking_mode: mode });
+      if (res.active_log_id) newLogId = res.active_log_id;
     }
+    setActiveLogId(newLogId);
     setStartedAt(new Date());
     setRunning(true);
-    startTracking("auto-screenshot");
   };
 
   const handleStartReady = (task: Task) => {
@@ -211,10 +233,12 @@ const TrackerPortal = () => {
         duration_seconds: elapsed,
         started_at: startedAt.toISOString(),
         mark_done: markDone,
+        active_log_id: activeLogId,
       });
       if (result.error) { alert(result.error); setSaving(false); return; }
       setElapsed(0);
       setSelectedTaskId("");
+      setActiveLogId(null);
       setStartedAt(null);
       stopTracking();
       localStorage.removeItem(TIMER_KEY);
@@ -223,9 +247,13 @@ const TrackerPortal = () => {
     finally { setSaving(false); }
   };
 
-  const handleDiscard = () => {
+  const handleDiscard = async () => {
+    if (activeLogId) {
+      await api("delete_log", { id: activeLogId });
+    }
     setElapsed(0);
     setSelectedTaskId("");
+    setActiveLogId(null);
     setStartedAt(null);
     stopTracking();
     localStorage.removeItem(TIMER_KEY);
@@ -270,20 +298,12 @@ const TrackerPortal = () => {
       const newTaskId = res.task?.id;
       if (newTaskId) {
         setSelectedTaskId(newTaskId);
-        // 2. Start log immediately (sets status to in_progress)
-        const startRes = await api("start_log", { assigned_task_id: newTaskId, description: title.trim() });
-        if (startRes.error) {
-          toast.error(startRes.error);
-        } else {
-          setStartedAt(new Date());
-          setRunning(true);
-          startTracking("auto-screenshot");
-          setNewTaskTitle("");
-          toast.success("Project started! Client can now see your active status.");
-        }
+        setNewTaskTitle("");
+        await loadData();
+        setShowModeModal(true);
+        toast.success("Project created! Please select a tracking mode to start.");
       }
-      await loadData();
-    } catch { toast.error("Failed to create and start task"); }
+    } catch { toast.error("Failed to create task"); }
     finally { setSaving(false); }
   };
 
@@ -325,7 +345,7 @@ const TrackerPortal = () => {
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#020817]">
       {/* Premium Header */}
       <header className="sticky top-0 z-30 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="h-10 w-10 rounded-xl bg-brand shadow-lg shadow-brand/20 grid place-items-center">
               <Timer className="h-5 w-5 text-brand-foreground" />
@@ -340,9 +360,25 @@ const TrackerPortal = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {member.role === "manager" && (
+              <div className="flex items-center p-1 rounded-lg bg-secondary/50 border border-border/50">
+                <button
+                  onClick={() => setViewMode("personal")}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${viewMode === "personal" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  My Tracking
+                </button>
+                <button
+                  onClick={() => setViewMode("team")}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${viewMode === "team" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Team Control Center
+                </button>
+              </div>
+            )}
             <button 
               onClick={toggleTheme}
-              className="h-10 w-10 rounded-xl bg-secondary hover:bg-secondary/80 flex items-center justify-center transition-colors"
+              className="h-10 w-10 rounded-xl bg-secondary hover:bg-secondary/80 flex items-center justify-center transition-colors shrink-0"
               title="Toggle theme"
             >
               {isDark ? <Sun className="h-5 w-5 text-yellow-500" /> : <Moon className="h-5 w-5 text-slate-700" />}
@@ -362,6 +398,9 @@ const TrackerPortal = () => {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
+        {viewMode === "team" && member.role === "manager" ? (
+          <TeamControlCenter teamMembers={teamMembers} liveSessions={liveSessions} historicalLogs={historicalLogs} onRefresh={loadData} />
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Left Column: Timer & Controls */}
@@ -473,7 +512,7 @@ const TrackerPortal = () => {
                   <div className="flex items-center justify-center gap-3 pt-4">
                     {running ? (
                       <>
-                        <button onClick={() => setRunning(false)} className="inline-flex items-center gap-2 h-14 px-8 rounded-2xl bg-secondary hover:bg-secondary/80 text-secondary-foreground font-bold shadow-sm transition-all">
+                        <button onClick={handlePause} className="inline-flex items-center gap-2 h-14 px-8 rounded-2xl bg-secondary hover:bg-secondary/80 text-secondary-foreground font-bold shadow-sm transition-all">
                           <Pause className="h-5 w-5" /> Pause
                         </button>
                         <button onClick={() => handleFinish(true)} disabled={saving} className="inline-flex items-center gap-2 h-14 px-8 rounded-2xl bg-brand hover:bg-brand/90 text-brand-foreground font-bold shadow-xl shadow-brand/20 disabled:opacity-50 transition-all scale-105">
@@ -488,7 +527,7 @@ const TrackerPortal = () => {
                         <button onClick={() => handleFinish(false)} disabled={saving} className="inline-flex items-center gap-2 h-12 px-6 rounded-xl bg-secondary hover:bg-secondary/80 text-secondary-foreground font-bold disabled:opacity-50">
                           Save Progress
                         </button>
-                        <button onClick={() => { if (!startedAt) setStartedAt(new Date(Date.now() - elapsed * 1000)); setRunning(true); }} className="inline-flex items-center gap-2 h-14 px-10 rounded-2xl bg-brand hover:bg-brand/90 text-brand-foreground font-bold shadow-xl shadow-brand/20 transition-all scale-105">
+                        <button onClick={() => setShowModeModal(true)} className="inline-flex items-center gap-2 h-14 px-10 rounded-2xl bg-brand hover:bg-brand/90 text-brand-foreground font-bold shadow-xl shadow-brand/20 transition-all scale-105">
                           <Play className="h-5 w-5 fill-current" /> Resume
                         </button>
                       </>
@@ -581,7 +620,8 @@ const TrackerPortal = () => {
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        )}
       </main>
       <CaptureWidget />
 

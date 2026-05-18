@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Trash2, Link2, Users, ClipboardList, UserPlus, X } from "lucide-react";
+import { Plus, Trash2, Link2, Users, ClipboardList, UserPlus, X, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
-type TeamMember = { id: string; name: string; email: string | null; responsibility: string | null; share_token: string; created_at: string; client_id: string | null };
+type TeamMember = { id: string; name: string; email: string | null; responsibility: string | null; share_token: string; created_at: string; client_id: string | null; role: string };
 type AssignedTask = { id: string; team_member_id: string; client_id: string | null; title: string; description: string | null; status: string; created_at: string };
 type Client = { id: string; name: string };
 
@@ -21,6 +21,7 @@ const TaskAssignment = () => {
   const [memberEmail, setMemberEmail] = useState("");
   const [memberResponsibility, setMemberResponsibility] = useState("");
   const [memberClientId, setMemberClientId] = useState("");
+  const [memberRole, setMemberRole] = useState("member");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
   const [taskMemberId, setTaskMemberId] = useState("");
@@ -55,10 +56,11 @@ const TaskAssignment = () => {
       email: memberEmail.trim() || null,
       responsibility: memberResponsibility.trim() || null,
       client_id: memberClientId,
+      role: memberRole,
     });
     if (error) { toast.error(error.message); return; }
     toast.success(`${memberName.trim()} added to team`);
-    setMemberName(""); setMemberEmail(""); setMemberResponsibility(""); setMemberClientId(""); setShowMemberForm(false);
+    setMemberName(""); setMemberEmail(""); setMemberResponsibility(""); setMemberClientId(""); setMemberRole("member"); setShowMemberForm(false);
     load();
   };
 
@@ -70,11 +72,12 @@ const TaskAssignment = () => {
       email: memberEmail.trim() || null,
       responsibility: memberResponsibility.trim() || null,
       client_id: memberClientId,
+      role: memberRole,
     }).eq("id", editingMember.id);
     if (error) { toast.error(error.message); return; }
     toast.success("Team member updated");
     setEditingMember(null);
-    setMemberName(""); setMemberEmail(""); setMemberResponsibility(""); setMemberClientId("");
+    setMemberName(""); setMemberEmail(""); setMemberResponsibility(""); setMemberClientId(""); setMemberRole("member");
     load();
   };
 
@@ -84,6 +87,7 @@ const TaskAssignment = () => {
     setMemberEmail(m.email ?? "");
     setMemberResponsibility(m.responsibility ?? "");
     setMemberClientId(m.client_id ?? "");
+    setMemberRole(m.role || "member");
   };
 
   const removeMember = async (id: string) => {
@@ -189,7 +193,10 @@ const TaskAssignment = () => {
                         <div className="h-7 w-7 rounded-full bg-brand-soft text-brand-soft-foreground grid place-items-center text-[10px] font-bold">
                           {m.name.slice(0, 2).toUpperCase()}
                         </div>
-                        {m.name}
+                        <div className="flex flex-col">
+                          <span>{m.name}</span>
+                          {m.role === "manager" && <span className="text-[9px] font-bold uppercase tracking-wider text-brand bg-brand/10 px-1.5 py-0.5 rounded w-max mt-0.5">Manager</span>}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">{m.responsibility ?? "—"}</td>
@@ -204,7 +211,7 @@ const TaskAssignment = () => {
                           <Link2 className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={() => startEditMember(m)} title="Edit member" className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-secondary">
-                          <Plus className="h-3.5 w-3.5 rotate-45" /> {/* Use a generic icon or Edit if I had one, but let's stick to consistent UI */}
+                          <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={() => removeMember(m.id)} title="Remove member" className="inline-flex items-center justify-center h-8 w-8 rounded-md text-destructive hover:bg-destructive/10">
                           <Trash2 className="h-3.5 w-3.5" />
@@ -297,6 +304,13 @@ const TaskAssignment = () => {
               </select>
             </div>
             <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Role *</label>
+              <select required value={memberRole} onChange={(e) => setMemberRole(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                <option value="member">Team Member</option>
+                <option value="manager">Manager (Can view team logs)</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Responsibility</label>
               <input value={memberResponsibility} onChange={(e) => setMemberResponsibility(e.target.value)} placeholder="Senior Logistics Coordinator" className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
@@ -326,6 +340,13 @@ const TaskAssignment = () => {
               <select required value={memberClientId} onChange={(e) => setMemberClientId(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
                 <option value="">Select client...</option>
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Role *</label>
+              <select required value={memberRole} onChange={(e) => setMemberRole(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                <option value="member">Team Member</option>
+                <option value="manager">Manager (Can view team logs)</option>
               </select>
             </div>
             <div className="space-y-1.5">

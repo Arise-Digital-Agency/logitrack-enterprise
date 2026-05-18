@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
 
   const { data: member, error: memberErr } = await admin
     .from("team_members")
-    .select("id, name, email, user_id, client_id, responsibility")
+    .select("id, name, email, user_id, client_id, responsibility, role")
     .eq("share_token", token)
     .maybeSingle();
 
@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
           .eq("team_member_id", member.id)
           .order("created_at", { ascending: false }),
         admin.from("time_logs")
-          .select("id, description, duration_seconds, started_at, assigned_task_id")
+          .select("id, description, duration_seconds, started_at, assigned_task_id, tracking_mode")
           .eq("team_member_id", member.id)
           .order("started_at", { ascending: false })
           .limit(50),
@@ -57,12 +57,27 @@ Deno.serve(async (req) => {
         TRACKABLE_STATUSES.includes(t.status)
       );
 
+      let managerData = {};
+      if (member.role === "manager") {
+         const [{data: tMembers}, {data: activeLogs}, {data: histLogs}] = await Promise.all([
+            admin.from("team_members").select("id, name, responsibility").eq("user_id", member.user_id),
+            admin.from("time_logs").select("id, description, duration_seconds, started_at, team_member_id, assigned_task_id, tracking_mode").eq("user_id", member.user_id).eq("is_active", true),
+            admin.from("time_logs").select("id, description, duration_seconds, started_at, team_member_id, assigned_task_id, tracking_mode").eq("user_id", member.user_id).eq("is_active", false).order("started_at", { ascending: false }).limit(100),
+         ]);
+         managerData = {
+           teamMembers: tMembers ?? [],
+           liveSessions: activeLogs ?? [],
+           historicalLogs: histLogs ?? []
+         };
+      }
+
       return json({
-        member: { id: member.id, name: member.name, responsibility: member.responsibility },
+        member: { id: member.id, name: member.name, responsibility: member.responsibility, role: member.role },
         tasks: allTasks,
         pendingTasks,
         activeTasks,
         logs: logs ?? [],
+        ...managerData
       });
     }
 
@@ -110,12 +125,16 @@ Deno.serve(async (req) => {
     }
 
     if (op === "start_log") {
-      const { assigned_task_id, description } = body;
+      const { assigned_task_id, description, tracking_mode } = body;
       if (!description || typeof description !== "string") return json({ error: "Description required" }, 400);
+
+      let client_id: string | null = member.client_id ?? null;
+      let request_id: string | null = null;
+      let hourly_rate: number | null = null;
 
       if (assigned_task_id) {
         const { data: task } = await admin.from("assigned_tasks")
-          .select("id, status")
+          .select("id, status, client_id, request_id")
           .eq("id", assigned_task_id)
           .eq("team_member_id", member.id)
           .maybeSingle();
@@ -123,16 +142,42 @@ Deno.serve(async (req) => {
         if (!TRACKABLE_STATUSES.includes(task.status)) {
           return json({ error: "Accept the assignment before starting the timer" }, 400);
         }
+        
+        client_id = task.client_id ?? client_id;
+        request_id = task.request_id;
+        
         if (task.status === "accepted") {
           await admin.from("assigned_tasks").update({ status: "in_progress" }).eq("id", assigned_task_id);
         }
       }
 
-      return json({ ok: true });
+      if (client_id) {
+        const { data: cl } = await admin.from("clients").select("hourly_rate").eq("id", client_id).maybeSingle();
+        hourly_rate = cl?.hourly_rate ?? null;
+      }
+
+      const { data: newLog, error } = await admin.from("time_logs").insert({
+        user_id: member.user_id,
+        team_member_id: member.id,
+        assigned_task_id: assigned_task_id || null,
+        request_id: request_id || null,
+        client_id,
+        description: String(description).slice(0, 200),
+        duration_seconds: 0,
+        started_at: new Date().toISOString(),
+        hourly_rate: hourly_rate ?? 0,
+        billable: (hourly_rate ?? 0) > 0,
+        is_active: true,
+        tracking_mode: tracking_mode || "standard",
+      }).select("id").single();
+      
+      if (error) return json({ error: error.message }, 400);
+
+      return json({ ok: true, active_log_id: newLog.id });
     }
 
     if (op === "save_log") {
-      const { assigned_task_id, description, duration_seconds, started_at } = body;
+      const { assigned_task_id, description, duration_seconds, started_at, active_log_id } = body;
       if (!description || typeof description !== "string") return json({ error: "Description required" }, 400);
       if (!duration_seconds || duration_seconds < 1) return json({ error: "Invalid duration" }, 400);
 
@@ -173,26 +218,41 @@ Deno.serve(async (req) => {
         hourly_rate = cl?.hourly_rate ?? null;
       }
 
-      const { data, error } = await admin.from("time_logs").insert({
-        user_id: member.user_id,
-        team_member_id: member.id,
-        assigned_task_id: assigned_task_id || null,
-        request_id: request_id || null,
-        client_id,
-        description: String(description).slice(0, 200),
-        duration_seconds: Math.min(duration_seconds, 86400),
-        started_at: started_at || new Date().toISOString(),
-        hourly_rate: hourly_rate ?? 0,
-        billable: (hourly_rate ?? 0) > 0,
-      }).select().single();
+      let logData;
+      let logError;
 
-      if (error) return json({ error: error.message }, 400);
+      if (active_log_id) {
+        const { data, error } = await admin.from("time_logs").update({
+          duration_seconds: Math.min(duration_seconds, 86400),
+          is_active: false,
+        }).eq("id", active_log_id).eq("team_member_id", member.id).select().single();
+        logData = data;
+        logError = error;
+      } else {
+        const { data, error } = await admin.from("time_logs").insert({
+          user_id: member.user_id,
+          team_member_id: member.id,
+          assigned_task_id: assigned_task_id || null,
+          request_id: request_id || null,
+          client_id,
+          description: String(description).slice(0, 200),
+          duration_seconds: Math.min(duration_seconds, 86400),
+          started_at: started_at || new Date().toISOString(),
+          hourly_rate: hourly_rate ?? 0,
+          billable: (hourly_rate ?? 0) > 0,
+          is_active: false,
+        }).select().single();
+        logData = data;
+        logError = error;
+      }
+
+      if (logError) return json({ error: logError.message }, 400);
 
       if (body.mark_done && assigned_task_id) {
         await admin.from("assigned_tasks").update({ status: "done" }).eq("id", assigned_task_id);
       }
 
-      return json({ log: data });
+      return json({ log: logData });
     }
 
     if (op === "delete_log") {
