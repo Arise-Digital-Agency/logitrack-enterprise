@@ -1,5 +1,7 @@
 import { Camera, Circle, Square, Timer, TimerOff } from "lucide-react";
 import { useTracking } from "@/contexts/TrackingContext";
+import { useState } from "react";
+import { TrackingModeModal } from "@/components/TrackingModeModal";
 
 const fmt = (s: number) => {
   const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -9,6 +11,7 @@ const fmt = (s: number) => {
 
 export const CaptureWidget = () => {
   const { activeMode, isRecording, autoCapture, stopTracking, takeManualScreenshot, startTracking } = useTracking();
+  const [showModeModal, setShowModeModal] = useState(false);
   const supported = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia;
 
   if (!supported) return null;
@@ -56,15 +59,21 @@ export const CaptureWidget = () => {
         </button>
       ) : (
         <button
-          onClick={() => startTracking("recording")}
-          title="Start screen recording"
+          onClick={() => setShowModeModal(true)}
+          title="Choose tracking mode"
           className="inline-flex items-center gap-2 h-10 px-4 rounded-full bg-brand text-brand-foreground text-sm font-semibold hover:bg-brand/90"
-          aria-label="Start screen recording"
+          aria-label="Choose tracking mode"
         >
           <Circle className="h-3.5 w-3.5 fill-current" />
-          Record
+          Track
         </button>
       )}
+
+      <TrackingModeModal
+        open={showModeModal}
+        onOpenChange={setShowModeModal}
+        onSelect={(mode) => startTracking(mode)}
+      />
     </div>
   );
 };
